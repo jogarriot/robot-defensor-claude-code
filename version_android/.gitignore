@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+android-bridge/out/
+android-bridge/build/
+*.apk
+*.keystore
+*.so
+/tmp/
+ble_advertiser
+entitlements.plist
+test_*.py
+scan_test.py
+deep_scan.py
+try_connect.py

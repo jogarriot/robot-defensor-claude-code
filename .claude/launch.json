@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "MCP Server - Android version (Robo Defensor)",
+      "runtimeExecutable": "/Users/aitza/Documents/robot-defensor-claude-code/.venv/bin/python3.12",
+      "runtimeArgs": ["/Users/aitza/Documents/robot-defensor-claude-code/version_android/robo_defensor_mcp.py"],
+      "port": 0
+    },
+    {
+      "name": "Android Bridge (via ADB)",
+      "runtimeExecutable": "adb",
+      "runtimeArgs": ["shell", "am", "start", "-n", "com.qunyu.robolab/com.robobridge.MainActivity"],
+      "port": 8765
+    },
+    {
+      "name": "Swift BLE Advertiser",
+      "runtimeExecutable": "swift",
+      "runtimeArgs": ["/Users/aitza/Documents/robot-defensor-claude-code/version_android/ble_advertiser.swift", "scan"],
+      "port": 0
+    }
+  ]
+}

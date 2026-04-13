@@ -19,5 +19,12 @@
       "runtimeArgs": ["/Users/aitza/Documents/robot-defensor-claude-code/version_android/ble_advertiser.swift", "scan"],
       "port": 0
     }
+    ,
+    {
+      "name": "MCP Server - Mac version",
+      "runtimeExecutable": "/Users/aitza/Documents/robot-defensor-claude-code/.venv/bin/python3.12",
+      "runtimeArgs": ["/Users/aitza/Documents/robot-defensor-claude-code/version_mac/robo_defensor_mcp.py"],
+      "port": 0
+    }
   ]
 }

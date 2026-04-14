@@ -21,20 +21,19 @@ ASUS USB-BT500 macOS setup (RTL8761B has NO native macOS driver):
   any kernel driver — this lets PyUSB/libusb access it directly, which is
   what we want.
 
-  BEFORE running this server, you must load firmware onto the adapter:
-    pip install bumble
+  Firmware is loaded AUTOMATICALLY on startup via bumble-rtk-util.
+  The RTL8761B starts in bare ROM mode and needs firmware before HCI works.
+  Bumble handles this via USB HCI vendor commands.
+  (see github.com/google/bumble/issues/747 — confirmed working on macOS)
+
+  One-time setup:
+    pip install bumble pyusb libusb-package "mcp[cli]"
     bumble-rtk-fw-download          # downloads rtl8761b_fw.bin + config
-    bumble-rtk-util load            # uploads firmware via USB HCI vendor cmds
-  Confirmed working on macOS (see github.com/google/bumble/issues/747).
-  Without firmware the chip is in bare ROM mode and HCI commands will fail.
 
   If macOS tries to switch its BT stack to the external adapter, prevent it:
     sudo nvram bluetoothHostControllerSwitchBehavior="never"
 
   If claim_interface fails, run with sudo.
-
-  NOTE: HCI_RESET may revert the chip to ROM mode, requiring a firmware
-  reload. If advertising stops working after a reset, re-run bumble-rtk-util.
 
   Firmware files:  github.com/amcabezas/bt_rtl8761b-fw
   Bumble RTL docs: google.github.io/bumble/drivers/realtek.html
@@ -43,6 +42,8 @@ ASUS USB-BT500 macOS setup (RTL8761B has NO native macOS driver):
 
 import asyncio
 import random
+import shutil
+import subprocess
 import threading
 import time
 import logging
@@ -261,13 +262,68 @@ class BLEAdvertiserHCI:
             self._ep_in      = ep_in
             self._ep_bulk_in = ep_bulk_in
 
-            if not self._hci_cmd(HCI_RESET, b"", wait_ms=1500):
-                logger.error("HCI Reset failed")
-                return False
+            # Load RTL8761B firmware via bumble before any HCI commands.
+            # The chip starts in bare ROM mode; without firmware, HCI
+            # advertising commands silently fail. HCI_RESET can also
+            # revert to ROM mode, so we load firmware first and skip
+            # the reset — bumble-rtk-util already resets as part of
+            # its loading sequence.
+            if not self._load_firmware():
+                logger.warning("Firmware load failed — adapter may be in ROM mode. "
+                               "Falling back to HCI_RESET.")
+                if not self._hci_cmd(HCI_RESET, b"", wait_ms=1500):
+                    logger.error("HCI Reset also failed")
+                    return False
 
             self._initialized = True
             logger.info("BLEAdvertiserHCI initialized (ASUS USB-BT500)")
             return True
+
+    def _load_firmware(self) -> bool:
+        """Load RTL8761B firmware using bumble-rtk-util.
+
+        Must be called before HCI_RESET, which would revert the chip
+        to ROM mode. bumble-rtk-util does its own reset internally.
+
+        Requires: pip install bumble && bumble-rtk-fw-download
+        """
+        rtk_util = shutil.which("bumble-rtk-util")
+        if rtk_util is None:
+            logger.warning("bumble-rtk-util not found. "
+                           "Install bumble: pip install bumble && bumble-rtk-fw-download")
+            return False
+
+        # Release the interface so bumble can claim the device
+        try:
+            usb.util.release_interface(self._dev, 0)
+        except Exception:
+            pass
+
+        logger.info("Loading RTL8761B firmware via bumble-rtk-util...")
+        try:
+            result = subprocess.run(
+                [rtk_util, "load"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info("Firmware loaded successfully")
+            else:
+                logger.warning(f"bumble-rtk-util exit code {result.returncode}: "
+                               f"{result.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            logger.warning("bumble-rtk-util timed out after 30s")
+            return False
+        except Exception as e:
+            logger.warning(f"bumble-rtk-util failed: {e}")
+            return False
+
+        # Re-claim interface after bumble releases it
+        try:
+            usb.util.claim_interface(self._dev, 0)
+        except Exception as e:
+            logger.warning(f"Re-claim after firmware load: {e}")
+
+        return result.returncode == 0
 
     # ------------------------------------------------------------------
     # HCI command / event helpers
